@@ -1,0 +1,12 @@
+runs/
+__pycache__/
+*.pyc
+
+# local files that are not part of the app
+/evaluation/
+/benchmarks/
+/miniGPTKB-start.txt
+/demo draft/
+/miniGPTKB_demo*.zip
+/miniGPTKB_demo_draft2/
+/paper_working_version*

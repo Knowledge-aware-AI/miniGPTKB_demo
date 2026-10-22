@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>miniGPTKB</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="rail">
+        <div class="rail-brand">
+          <span class="rail-brand-mark">
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="5" cy="6" r="2.2" fill="#0c2027" /><circle cx="19" cy="6" r="2.2" fill="#0c2027" />
+              <circle cx="12" cy="18" r="2.2" fill="#0c2027" />
+              <path d="M6.8 7.2L11 16M17.2 7.2L13 16M7 6H17" stroke="#0c2027" stroke-width="1.4" />
+            </svg>
+          </span>
+          <span class="rail-brand-word">miniGPTKB</span>
+          <button type="button" id="rail-collapse" class="rail-collapse" title="Hide sidebar" aria-label="Hide sidebar">&laquo;</button>
+        </div>
+
+        <div class="rail-section-label">Runs</div>
+        <div class="run-tabs" id="run-tabs"></div>
+        <button type="button" id="add-tab-button" class="add-tab-button" title="New run tab">+ New run</button>
+
+        <div class="rail-spacer"></div>
+        <div class="rail-foot">
+          <button type="button" class="tab-button active" data-view="dashboard-view">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="5" rx="1.5"/><rect x="13" y="11" width="8" height="10" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/></svg>
+            Dashboard
+          </button>
+          <button type="button" class="tab-button" data-view="runs-view">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5"/></svg>
+            Run Explorer
+          </button>
+          <div class="theme-toggle" id="theme-toggle">
+            <button type="button" class="opt" data-theme-choice="light">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+              Light
+            </button>
+            <button type="button" class="opt" data-theme-choice="dark">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.6A9 9 0 1 1 11.4 3a7 7 0 0 0 9.6 9.6Z"/></svg>
+              Dark
+            </button>
+          </div>
+        </div>
+        <div class="rail-resizer" id="rail-resizer" role="separator" aria-orientation="vertical" title="Drag to resize the sidebar"></div>
+      </aside>
+      <button type="button" id="rail-show" class="rail-show" title="Show sidebar" aria-label="Show sidebar">&raquo;</button>
+
+      <div class="main">
+        <div class="main-inner">
+          <main id="dashboard-view" class="app-view active">
+            <div id="run-tab-panes"></div>
+          </main>
+
+          <main id="runs-view" class="runs-view app-view">
+            <section class="runs-panel">
+              <div class="runs-header">
+                <div>
+                  <span class="eyebrow">Run Explorer</span>
+                  <h2>Runs</h2>
+                  <span class="runs-hint">&harr; Drag the marks between column headers to resize columns.</span>
+                </div>
+                <div class="runs-header-actions">
+                  <select id="move-selected-runs" class="hidden">
+                    <option value="" selected disabled>Move selected to&hellip;</option>
+                    <option value="__none__">No folder</option>
+                  </select>
+                  <button type="button" id="delete-selected-runs" class="delete-run-button hidden">Delete selected</button>
+                  <button type="button" id="new-folder-button">+ New folder</button>
+                  <button type="button" id="refresh-runs">Refresh</button>
+                </div>
+              </div>
+              <div class="runs-table-wrap">
+                <table class="runs-table">
+                  <thead>
+                    <tr>
+                      <th class="select-cell"><input type="checkbox" id="select-all-runs" title="Select all runs" /></th>
+                      <th>ID</th>
+                      <th>Status</th>
+                      <th>Topic</th>
+                      <th>Seed</th>
+                      <th>Model</th>
+                      <th>Cost</th>
+                      <th>Duration</th>
+                      <th>Processed</th>
+                      <th>Queued</th>
+                      <th>Triples</th>
+                      <th>Size</th>
+                      <th>Modified</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="runs-body">
+                    <tr><td colspan="14">No runs loaded yet.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </main>
+        </div>
+      </div>
+    </div>
+
+    <template id="run-tab-template">
+      <div class="run-tab-pane">
+        <div class="hero-strip">
+          <div class="hero-title-block">
+            <span class="eyebrow">Run Status</span>
+            <div class="hero-title">
+              <span class="status-dot" data-role="status-dot"></span>
+              <h2 data-role="status-text" class="status-text">Idle</h2>
+            </div>
+            <a data-role="html-index-link" class="html-index-link hidden" href="#" target="_blank" rel="noreferrer">Open results ↗</a>
+          </div>
+
+          <div class="hero-metrics">
+            <div class="hero-metric accent"><div data-role="elapsed-time" class="m-value">-</div><div class="m-label">Elapsed</div></div>
+            <div class="hero-metric"><div data-role="processed" class="m-value">0</div><div class="m-label">Processed</div></div>
+            <div class="hero-metric"><div data-role="queued" class="m-value">0</div><div class="m-label">Queued</div></div>
+            <div class="hero-metric"><div data-role="triples" class="m-value">0</div><div class="m-label">Triples</div></div>
+            <div class="hero-metric"><div data-role="failed-subjects" class="m-value">0</div><div class="m-label">Failed</div></div>
+            <div class="hero-metric"><div data-role="literals" class="m-value">0</div><div class="m-label">Literals</div></div>
+            <div class="hero-metric"><div data-role="entities" class="m-value">0</div><div class="m-label">Entities</div></div>
+            <div class="hero-metric"><div data-role="pending" class="m-value">0</div><div class="m-label">Pending</div></div>
+            <div class="hero-metric"><div data-role="live-cost" class="m-value">-</div><div class="m-label">Cost</div></div>
+          </div>
+
+          <div data-role="current-subject" class="current-subject">No active subject</div>
+
+          <div class="hero-controls">
+            <div class="hero-actions">
+              <button type="button" data-role="start-button" class="start-button">Start</button>
+              <button type="button" data-role="pause-button" class="pause-button" disabled>Pause</button>
+              <button type="button" data-role="stop-button" class="stop-button" disabled>Stop</button>
+            </div>
+            <select data-role="folder-select" class="hero-folder" title="Folder for this run">
+              <option value="">No folder</option>
+              <option value="__new__">+ New folder&hellip;</option>
+            </select>
+            <input data-role="new-folder-name" class="hero-folder hidden" type="text" placeholder="New folder name" />
+          </div>
+        </div>
+
+        <div class="workspace">
+          <section class="config-col card">
+            <form data-role="run-form">
+              <h2 class="section-title">Model</h2>
+              <label class="field">
+                <span class="field-label">Endpoint</span>
+                <select data-role="endpoint-select">
+                  <option value="https://llm.scads.ai/v1" selected>ScaDS.AI (https://llm.scads.ai/v1)</option>
+                  <option value="https://api.openai.com/v1">OpenAI (https://api.openai.com/v1)</option>
+                  <option value="https://openrouter.ai/api/v1">OpenRouter (https://openrouter.ai/api/v1)</option>
+                  <option value="custom">Custom</option>
+                </select>
+              </label>
+              <label class="field hidden" data-role="llm-url-label">
+                <span class="field-label">Custom LLM URL</span>
+                <input data-role="llm-url" name="llm_url" value="https://llm.scads.ai/v1" required />
+              </label>
+              <label class="field">
+                <span class="field-label">API key
+                  <span class="info-tooltip" tabindex="0">
+                    <span class="info-icon" aria-hidden="true">i</span>
+                    <span class="info-tooltip-text">We don't store, log, or reuse your API key for anything beyond this run &mdash; it's sent straight to the endpoint you pick and never touches disk. Still not sure? Feel free to use a temporary or spend-limited key instead of your main one.</span>
+                  </span>
+                </span>
+                <input name="api_key" type="password" placeholder="sk-..." />
+              </label>
+              <p class="field-note" data-role="scads-key-note">Leave this blank to use the project's shared ScaDS.AI key. Enter your own key to use your personal quota/billing instead. Runs on the shared key stop after 60 minutes unless you set a runtime limit or choose no time limit (Advanced &rsaquo; Stopping Criteria).</p>
+              <label class="field">
+                <span class="field-label">Model
+                  <span class="info-tooltip" tabindex="0">
+                    <span class="info-icon" aria-hidden="true">i</span>
+                    <span class="info-tooltip-text">Does all three tasks of a run: stating the facts about each entity (elicitation), recognizing which objects of the facts are named entities (NER), and deciding which mentions refer to the same entity, relation or class (NED). Under Advanced, NER and NED can each use a different model.</span>
+                  </span>
+                </span>
+                <select data-role="model-select" name="model" required>
+                  <option value="">Enter an API key to load models</option>
+                </select>
+                <input data-role="model-input" class="hidden" placeholder="e.g. my-model-name" required />
+              </label>
+              <label class="field hidden" data-role="reasoning-toggle-field">
+                <span class="field-label">Reasoning (elicitation)</span>
+                <span class="switch-row">
+                  <input type="checkbox" data-role="reasoning-toggle-input" />
+                  <span data-role="reasoning-toggle-label">Enabled</span>
+                </span>
+              </label>
+              <label class="field slider-row hidden" data-role="reasoning-effort-field">
+                <span class="field-label">Reasoning effort (elicitation) <span class="value" data-role="reasoning-effort-label">Medium</span></span>
+                <input data-role="reasoning-effort-slider" type="range" min="0" max="2" step="1" value="1" />
+                <div class="scale-labels" data-role="reasoning-effort-scale"></div>
+              </label>
+
+              <h2 class="section-title">Knowledge Graph</h2>
+              <label class="field">
+                <span class="field-label">Topic</span>
+                <input type="text" name="topic" value="the ancient city of Babylon" required />
+              </label>
+              <label class="field">
+                <span class="field-label">Seed entity</span>
+                <input type="text" name="seed_entity" value="Hammurabi" required />
+              </label>
+              <div class="field-row">
+                <label class="field">
+                  <span class="field-label">Language</span>
+                  <select data-role="language-select" name="language">
+                    <option value="en" selected>English</option>
+                  </select>
+                </label>
+                <label class="field slider-row">
+                  <span class="field-label">Desired triples <span class="value" data-role="triple-label">Medium</span></span>
+                  <input data-role="facts-slider" name="facts_multiplier" type="range" min="0.5" max="2" step="0.5" value="1" />
+                  <div class="scale-labels"><span>Few</span><span>Medium</span><span>Many</span></div>
+                </label>
+              </div>
+
+              <h2 class="section-title">Elicitation Prompt</h2>
+              <label class="field">
+                <span class="field-label">Template</span>
+                <select data-role="prompt-template-select">
+                  <option value="">GPTKB</option>
+                </select>
+              </label>
+              <label class="field">
+                <span class="field-label">Prompt <span class="field-hint">editable</span></span>
+                <textarea data-role="prompt-preview" name="prompt_template" rows="6"></textarea>
+              </label>
+
+              <details class="advanced">
+                <summary>Advanced</summary>
+                <div class="advanced-body">
+                  <h2 class="section-title" style="margin-top:0">Performance</h2>
+                  <div class="field-row">
+                    <label class="field"><span class="field-label">Parallel requests</span><input name="nthreads" type="number" min="1" max="50" value="5" /></label>
+                    <label class="field"><span class="field-label">Max requests/min</span><input name="max_requests_per_minute" type="number" min="1" placeholder="unlimited" /></label>
+                  </div>
+
+                  <h2 class="section-title">Models per task</h2>
+                  <label class="field">
+                    <span class="field-label">NER model
+                      <span class="info-tooltip" tabindex="0">
+                        <span class="info-icon" aria-hidden="true">i</span>
+                        <span class="info-tooltip-text">Named entity recognition: decides, for each elicited triple, whether its object is a named entity or a literal.</span>
+                      </span>
+                    </span>
+                    <select data-role="ner-model-select">
+                      <option value="">Enter an API key to load models</option>
+                    </select>
+                    <input data-role="ner-model-custom" class="hidden" placeholder="model name on the custom endpoint" />
+                  </label>
+                  <label class="field">
+                    <span class="field-label">NED model
+                      <span class="info-tooltip" tabindex="0">
+                        <span class="info-icon" aria-hidden="true">i</span>
+                        <span class="info-tooltip-text">Named entity disambiguation: matches each named entity, relation and class against existing candidates, and writes descriptions for new ones.</span>
+                      </span>
+                    </span>
+                    <select data-role="ned-model-select">
+                      <option value="">Enter an API key to load models</option>
+                    </select>
+                    <input data-role="ned-model-custom" class="hidden" placeholder="model name on the custom endpoint" />
+                  </label>
+
+                  <h2 class="section-title">Disambiguation</h2>
+                  <div class="field-row">
+                    <label class="field"><span class="field-label">NED candidates
+                      <span class="info-tooltip" tabindex="0">
+                        <span class="info-icon" aria-hidden="true">i</span>
+                        <span class="info-tooltip-text">How many existing entities the NED model is shown as possible matches for each mention (default 5). More candidates catch more merges but make each decision longer.</span>
+                      </span>
+                    </span><input name="ned_candidates" type="number" min="1" max="10" value="5" required /></label>
+                  </div>
+                  <label class="field slider-row">
+                    <span class="field-label">Entity merging
+                      <span class="info-tooltip" tabindex="0">
+                        <span class="info-icon" aria-hidden="true">i</span>
+                        <span class="info-tooltip-text">How readily different names are merged into one entity (e.g. &ldquo;MIT&rdquo; and &ldquo;Massachusetts Institute of Technology&rdquo;). On Standard, the NED model is shown the existing entities whose names are most similar to a new mention and decides whether one of them is the same entity. Moving the slider right, an existing entity is only shown if its name is at least this similar to the mention, so fewer but safer merges are made &mdash; at the cost of more duplicate entities. Entities with exactly the same name are always shown.</span>
+                      </span>
+                      <span class="value" data-role="merge-label">Standard</span>
+                    </span>
+                    <input data-role="merge-slider" type="range" min="0" max="7" step="1" value="0" />
+                    <div class="scale-labels"><span>Standard</span><span>Cautious</span></div>
+                  </label>
+
+                  <h2 class="section-title">Schema</h2>
+                  <div class="segments" role="radiogroup" aria-label="Schema mode">
+                    <label><input type="radio" name="schema_mode" value="open" checked /> Open</label>
+                    <label><input type="radio" name="schema_mode" value="example" /> Example-driven</label>
+                    <label><input type="radio" name="schema_mode" value="fixed" /> Fixed ontology</label>
+                  </div>
+                  <div data-role="schema-details" class="schema-details hidden">
+                    <textarea name="schema_text" rows="5" placeholder="Paste example triples or ontology guidance here"></textarea>
+                    <input data-role="schema-file" type="file" />
+                  </div>
+
+                  <h2 class="section-title">Stopping Criteria</h2>
+                  <label class="check-row"><input name="use_entities" type="checkbox" /> Entities <input name="max_entities" type="number" min="1" placeholder="300" /></label>
+                  <label class="check-row"><input name="use_bfs" type="checkbox" /> BFS depth <input name="max_bfs_depth" type="number" min="0" placeholder="4" /></label>
+                  <label class="check-row"><input name="use_cost" type="checkbox" /> Cost <div class="unit-input"><input name="max_cost" type="number" min="0" step="0.01" placeholder="10.00" /><span>$</span></div></label>
+                  <label class="check-row"><input name="use_runtime" type="checkbox" /> Runtime <div class="unit-input"><input name="max_runtime_seconds" type="number" min="1" placeholder="3600" /><span>s</span></div></label>
+                  <div class="field-note free-key-runtime hidden" data-role="free-key-runtime">
+                    This run uses the shared free ScaDS.AI key, so it stops after 60 minutes unless you set a runtime limit above or choose no time limit.
+                    <label class="note-check"><input name="no_time_limit" type="checkbox" /> No time limit</label>
+                  </div>
+                </div>
+              </details>
+            </form>
+          </section>
+
+          <div class="pane-splitter" data-role="pane-splitter" role="separator" aria-orientation="vertical" title="Drag to resize"></div>
+
+          <section class="log-col card">
+            <div class="log-toolbar">
+              <h3>Log</h3>
+              <select data-role="log-filter" aria-label="Log filter">
+                <option value="all">All</option>
+                <option value="warning">Warnings</option>
+                <option value="error">Errors</option>
+              </select>
+            </div>
+            <pre data-role="log-output" class="log-output"></pre>
+          </section>
+        </div>
+      </div>
+    </template>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>

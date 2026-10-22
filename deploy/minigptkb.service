@@ -1,0 +1,20 @@
+# Example systemd unit for a hosted miniGPTKB instance.
+# Copy to /etc/systemd/system/, adjust User and WorkingDirectory, then:
+#   sudo systemctl daemon-reload && sudo systemctl enable --now minigptkb
+# Put it behind a reverse proxy (e.g. nginx) for public access; the app
+# itself listens on localhost only.
+[Unit]
+Description=miniGPTKB
+After=network.target
+
+[Service]
+Type=simple
+User=minigptkb
+WorkingDirectory=/opt/miniGPTKB
+EnvironmentFile=/etc/minigptkb/env
+ExecStart=/usr/bin/python3 -m uvicorn app.server:app --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
