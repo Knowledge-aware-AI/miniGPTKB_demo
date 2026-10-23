@@ -74,6 +74,17 @@ python -m uvicorn app.server:app --host 127.0.0.1 --port 8000
 
 Then open <http://127.0.0.1:8000>.
 
+> **Embeddings need a ScaDS.AI key.** Disambiguation retrieves its candidates
+> with the embedding model Qwen3-Embedding-4B, which miniGPTKB calls on the
+> ScaDS.AI inference service with the key in `SCADS_API_KEY`, whatever endpoint
+> the language models use. Without that key, runs with disambiguation fail. To
+> run miniGPTKB without one, point the embeddings to another OpenAI-compatible
+> embeddings endpoint (e.g. Qwen3-Embedding-4B served locally with vLLM or
+> Ollama): the endpoint and model are set in `app/disambig/runner.py`
+> (`SCADS_EMBEDDING_URL`, `DEFAULT_EMBEDDING_MODEL`) and the key in
+> `app/server.py`. With a different embedding model, the similarity thresholds
+> of the entity-merging slider and of label clustering may need adjusting.
+
 Environment variables:
 
 | Variable | Purpose |
