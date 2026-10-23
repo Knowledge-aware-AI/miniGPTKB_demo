@@ -1,6 +1,7 @@
-fastapi
-uvicorn[standard]
-openai
-pydantic
-numpy
-scipy
+# Versions miniGPTKB is tested with (compatible minor/patch updates allowed).
+fastapi~=0.115.11
+uvicorn[standard]~=0.32.0
+openai~=1.69
+pydantic~=2.10
+numpy~=2.2
+scipy~=1.15

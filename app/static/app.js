@@ -22,10 +22,10 @@ const KNOWN_ENDPOINTS = [
   "https://openrouter.ai/api/v1",
 ];
 
-// Elicitation instruction texts lifted from the BeyondQuestions/elicitation
-// prompt library (/home/service/work/prompts/*.jinja) -- those files are full
-// OpenAI Batch API request templates for a different pipeline, so only their
-// system-message content (the actual instructions) is reused here; picking
+// Elicitation instruction texts taken from the prompt library of the Beyond
+// Questions elicitation experiments -- there they are full OpenAI Batch API
+// request templates for a different pipeline, so only their system-message
+// content (the actual instructions) is reused here; picking
 // one just loads its text into the Elicitation Prompt textarea, which already
 // fully overrides the auto-generated prompt when non-empty.
 const PROMPT_TEMPLATES = [
