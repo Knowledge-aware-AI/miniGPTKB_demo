@@ -22,7 +22,7 @@ A hosted instance runs at <http://minigptkb.scads.ai/>.
   does all three tasks (fact elicitation, named entity recognition,
   disambiguation) unless NER and NED are given models of their own under
   *Advanced*.
-- **Topic-scoped, multilingual elicitation:** 11 prompt languages, an editable
+- **Topic-scoped, multilingual elicitation:** 11 pre-packaged prompt languages, an editable
   prompt, open, example-driven or fixed-ontology schema.
 - **Budgets:** caps on entities, BFS depth, cost (USD) and runtime. Entity and
   depth caps stop the exploration but let pending disambiguation finish.
