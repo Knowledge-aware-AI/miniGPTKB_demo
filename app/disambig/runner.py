@@ -52,6 +52,7 @@ from app.runner import (
     get_reasoning_capability,
     resolve_reasoning_settings,
 )
+from app import reasoning
 from app.disambig import prompts as P
 from app.disambig import store as S
 from app.disambig.embeddings import EmbeddingClient, VectorIndex, cluster_labels
@@ -242,7 +243,10 @@ class LLMClient:
         endpoint = self.role_endpoint[role]
         if endpoint.kind == "openrouter":
             return OPENROUTER_REASONING_CAPABILITY
-        return get_reasoning_capability(endpoint.url, self.config.model_for(role))
+        model = self.config.model_for(role)
+        if not reasoning.cached_capability(endpoint.url, model)[0]:
+            self.log(f"Checking the reasoning options of {model} (first use, a few seconds).", "info")
+        return get_reasoning_capability(endpoint.url, model, endpoint.api_key)
 
     def resolved_reasoning(self, role: str) -> tuple[str | None, bool | None]:
         effort, enabled = self.reasoning[role]

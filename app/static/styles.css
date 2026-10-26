@@ -701,6 +701,12 @@ body.resizing-panes .pane-splitter::after {
   align-items: baseline;
 }
 
+.reasoning-checking {
+  font-size: 11.5px;
+  color: var(--muted);
+  margin: -6px 0 12px;
+}
+
 .field-hint {
   color: var(--faint);
   font-weight: 400;

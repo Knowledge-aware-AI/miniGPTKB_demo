@@ -71,72 +71,19 @@ OPENAI_TEXT_PRICING: dict[str, dict[str, float]] = {
     "babbage-002": {"input_per_mtok": 0.4, "output_per_mtok": 0.4},
 }
 
-# Which models expose reasoning controls, and the exact request shape each
-# one needs -- there's no standard "does this model support reasoning, and
-# how" discovery API (the plain OpenAI-compatible /v1/models endpoint this
-# app talks to for ScaDS/OpenAI/Custom returns none of this), so this is a
-# maintained table, same pattern as OPENAI_TEXT_PRICING above. OpenRouter is
-# the one exception: it normalizes reasoning across every model it proxies
-# into one shape and reports per-model support directly in its /models
-# response, so that endpoint is handled dynamically in server.py instead of
-# through this table -- see OPENROUTER_REASONING_CAPABILITY below.
+# Which reasoning controls a model has (an on/off switch, effort levels, and
+# the exact request fields for them) is found out by asking the model itself
+# -- see app/reasoning.py; model lists carry no reliable information about
+# it. OpenRouter is the exception: it normalizes reasoning across every model
+# it proxies into one shape and reports per-model support in its /models
+# response, so it is handled in server.py with the capability below.
 #
-# Each entry has up to two independent capabilities:
+# A capability has up to two independent parts:
 #   "toggle": reasoning can be fully switched on/off (a boolean control).
 #   "effort": reasoning intensity is tunable (an ordinal control).
-# A model may have neither, either, or both. "targets" is a list of paths
-# into the request kwargs where the resolved value gets written -- more than
-# one path exists for models (like gpt-oss below) that need the same value
-# in two places to actually take effect.
-REASONING_MODEL_PATTERNS: list[dict[str, Any]] = [
-    {
-        # Open-weight "gpt-oss" models, as served via ScaDS's vLLM-style
-        # gateway: reasoning_effort has to be set both as a normal extra
-        # field and inside chat_template_kwargs, since vLLM's chat template
-        # (not the server) is what actually turns it into a reasoning
-        # instruction.
-        "match": "gpt-oss",
-        "effort": {
-            "levels": ["low", "medium", "high"],
-            "default": "low",
-            "targets": [
-                ("extra_body", "reasoning_effort"),
-                ("extra_body", "chat_template_kwargs", "reasoning_effort"),
-            ],
-        },
-    },
-    {
-        # Moonshot's Kimi K2 "thinking" models: no effort scale, just an
-        # on/off switch. Matched on the "kimi-k2" family rather than one
-        # exact version, since this is a property of how the whole family is
-        # served, not one specific release.
-        "match": "kimi-k2",
-        "toggle": {
-            "default_on": False,
-            "on_value": "enabled",
-            "off_value": "disabled",
-            "target": ("extra_body", "thinking", "type"),
-        },
-    },
-]
-
-# OpenAI's actual API: reasoning_effort is a well-established top-level
-# parameter across the whole o1/o3/o4/gpt-5 reasoning lineup (every model
-# name already known to this file via OPENAI_TEXT_PRICING above), universally
-# accepting "low"/"medium"/"high". gpt-5.5 is kept as its own case: "none" is
-# the effort level actually already in use for it elsewhere in this file, so
-# it's preserved as that model's default and as an available level, without
-# assuming it's valid for the rest of the family too.
-_OPENAI_REASONING_EFFORT_DEFAULTS: dict[str, str] = {
-    "gpt-5.5": "none",
-    "gpt-5.4-mini": "low",
-    "gpt-5.4-nano": "low",
-}
-_OPENAI_REASONING_EFFORT_LEVELS: dict[str, list[str]] = {
-    "gpt-5.5": ["none", "low", "medium", "high"],
-}
-_OPENAI_DEFAULT_REASONING_LEVELS = ["low", "medium", "high"]
-_OPENAI_DEFAULT_REASONING_EFFORT = "medium"
+# "targets"/"target" are paths into the request kwargs where the resolved
+# value gets written -- more than one where a model needs the same value in
+# two places (e.g. gpt-oss on vLLM) to actually take effect.
 
 # OpenRouter's own unified reasoning API, used for any model it reports as
 # supporting the "reasoning" parameter (see server.py's OpenRouter capability
@@ -157,43 +104,17 @@ OPENROUTER_REASONING_CAPABILITY: dict[str, Any] = {
 }
 
 
-def _openai_reasoning_capability(model_lower: str) -> dict[str, Any] | None:
-    is_reasoning_family = (
-        model_lower.startswith("gpt-5")
-        or model_lower.startswith("o1")
-        or model_lower.startswith("o3")
-        or model_lower.startswith("o4")
-    )
-    if not is_reasoning_family:
-        return None
-    levels = _OPENAI_REASONING_EFFORT_LEVELS.get(model_lower, _OPENAI_DEFAULT_REASONING_LEVELS)
-    default = _OPENAI_REASONING_EFFORT_DEFAULTS.get(model_lower, _OPENAI_DEFAULT_REASONING_EFFORT)
-    return {
-        "toggle": None,
-        "effort": {"levels": levels, "default": default, "targets": [("reasoning_effort",)]},
-    }
-
-
-def get_reasoning_capability(llm_url: str, model: str) -> dict[str, Any] | None:
-    """The reasoning controls (if any) that apply to this model+endpoint --
-    the single source of truth shared by LocalKBCRunner._prompt_llm (which
-    builds the real request below) and the /api/reasoning-capability
-    endpoint (which tells the dashboard whether to show a slider/switch), so
-    the two can never disagree about what a model supports or what a value
-    means. Returns None for a model with no known reasoning controls at all
-    (the common case -- most models aren't reasoning models).
+def get_reasoning_capability(llm_url: str, model: str, api_key: str | None = None) -> dict[str, Any] | None:
+    """The reasoning controls (if any) of this model on this endpoint -- the
+    single source of truth shared by the runners (which build the real
+    requests with it) and the /api/reasoning-capability endpoint (which tells
+    the dashboard whether to show a switch or slider), so the two can never
+    disagree. Probed once per endpoint and model and then cached (see
+    app/reasoning.py); None for a model without reasoning controls.
     """
-    model_lower = model.strip().lower()
-    normalized_url = llm_url.strip().rstrip("/").lower()
+    from app import reasoning
 
-    if normalized_url == "https://api.openai.com/v1":
-        return _openai_reasoning_capability(model_lower)
-
-    for entry in REASONING_MODEL_PATTERNS:
-        if entry["match"] in model_lower:
-            return {"toggle": entry.get("toggle"), "effort": entry.get("effort")}
-
-    return None
+    return reasoning.capability_for(llm_url, api_key, model)
 
 
 def _set_nested(container: dict[str, Any], path: tuple[str, ...], value: Any) -> None:
@@ -727,7 +648,7 @@ class LocalKBCRunner:
         if self._is_openrouter_endpoint():
             self.reasoning_capability = OPENROUTER_REASONING_CAPABILITY
         else:
-            self.reasoning_capability = get_reasoning_capability(config.llm_url, config.model)
+            self.reasoning_capability = get_reasoning_capability(config.llm_url, config.model, config.api_key)
         self.resolved_reasoning_effort, self.resolved_reasoning_enabled = resolve_reasoning_settings(
             self.reasoning_capability, config.reasoning_effort, config.reasoning_enabled
         )

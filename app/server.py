@@ -523,7 +523,16 @@ def reasoning_capability(request: ReasoningCapabilityRequest) -> dict[str, Any]:
     """
     if request.llm_url.strip().rstrip("/").lower() == "https://openrouter.ai/api/v1":
         return _openrouter_reasoning_capability(request)
-    return get_reasoning_capability(request.llm_url, request.model) or _NO_REASONING_CAPABILITY
+    try:
+        api_key = _resolve_api_key(request.llm_url, request.api_key)
+    except HTTPException:
+        api_key = ""
+    # The first check of a model asks the model itself (a few seconds); the
+    # result is cached, so later checks and runs are instant.
+    try:
+        return get_reasoning_capability(request.llm_url, request.model, api_key) or _NO_REASONING_CAPABILITY
+    except Exception:
+        return _NO_REASONING_CAPABILITY
 
 
 def _openrouter_reasoning_capability(request: ReasoningCapabilityRequest) -> dict[str, Any]:

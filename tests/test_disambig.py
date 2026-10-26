@@ -13,6 +13,7 @@ import sqlite3
 import tempfile
 import threading
 import unittest
+from unittest import mock
 from pathlib import Path
 
 import numpy as np
@@ -20,6 +21,18 @@ import numpy as np
 from app.disambig import prompts as P
 from app.disambig.embeddings import EMBEDDING_DIM, EmbeddingClient, VectorIndex, cluster_labels
 from app.disambig.runner import DisambigConfig, DisambiguatedKBCRunner, LLMClient
+
+# No real model endpoint is ever called: reasoning-capability probing
+# (app/reasoning.py, tested in test_reasoning.py) is switched off here.
+_no_probing = mock.patch("app.reasoning.capability_for", lambda llm_url, api_key, model: None)
+
+
+def setUpModule():
+    _no_probing.start()
+
+
+def tearDownModule():
+    _no_probing.stop()
 
 # What the fake model "knows": subject label -> facts. Two different Munichs:
 # the film (object of notableWork) and the city (object of hasCity/livesIn).

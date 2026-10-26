@@ -1098,6 +1098,7 @@ function buildTabController(tabId, root) {
   let currentReasoningLevels = [];
 
   function hideReasoningControls() {
+    root.querySelector('[data-role="reasoning-checking"]')?.classList.add("hidden");
     reasoningToggleField.classList.add("hidden");
     reasoningEffortField.classList.add("hidden");
     currentReasoningLevels = [];
@@ -1145,6 +1146,10 @@ function buildTabController(tabId, root) {
       return;
     }
     const requestToken = ++reasoningRequestToken;
+    // The first check of a model asks the model itself and can take a few
+    // seconds; later checks are answered from the server's cache.
+    const checking = root.querySelector('[data-role="reasoning-checking"]');
+    const showChecking = setTimeout(() => checking?.classList.remove("hidden"), 400);
     let capability;
     try {
       capability = await postJSON("/api/reasoning-capability", {
@@ -1155,7 +1160,9 @@ function buildTabController(tabId, root) {
     } catch (error) {
       capability = { toggle: null, effort: null };
     }
+    clearTimeout(showChecking);
     if (requestToken !== reasoningRequestToken) return;
+    checking?.classList.add("hidden");
     applyReasoningCapability(capability);
   }
 
