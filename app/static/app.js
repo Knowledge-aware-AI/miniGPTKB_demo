@@ -695,10 +695,6 @@ function buildTabController(tabId, root) {
     root.querySelector('[data-role="triples"]').textContent = status.triples || 0;
     root.querySelector('[data-role="failed-subjects"]').textContent = status.failed_subjects || 0;
     root.querySelector('[data-role="literals"]').textContent = status.literals || 0;
-    // Classic (pre-disambiguation) runs report off-domain/total-object
-    // counts instead of entities/pending.
-    root.querySelector('[data-role="entities"]').textContent = status.entities ?? status.total_objects ?? 0;
-    root.querySelector('[data-role="pending"]').textContent = status.pending ?? status.off_domain_entities ?? 0;
     root.querySelector('[data-role="live-cost"]').textContent =
       status.cost_usd === null || status.cost_usd === undefined ? "-" : formatCost(status.cost_usd) || "$0.00";
   }
