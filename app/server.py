@@ -475,12 +475,32 @@ def list_models(request: ModelsRequest) -> dict[str, Any]:
     return {"models": models}
 
 
+# OpenRouter's /models list (several hundred models with their metadata) is
+# needed for the model dropdown and for every reasoning-capability check, so
+# it is kept for a few minutes instead of being downloaded each time. Failed
+# downloads are not cached.
+OPENROUTER_MODELS_TTL_SECONDS = 600
+_openrouter_models_cache: dict[str, tuple[float, dict[str, Any]]] = {}
+_openrouter_models_lock = threading.Lock()
+
+
+def _openrouter_models(llm_url: str, api_key: str) -> dict[str, Any]:
+    url = llm_url.strip().rstrip("/") + "/models"
+    with _openrouter_models_lock:
+        cached = _openrouter_models_cache.get(url)
+    if cached and time.monotonic() - cached[0] < OPENROUTER_MODELS_TTL_SECONDS:
+        return cached[1]
+    http_request = urllib.request.Request(url, headers={"Authorization": f"Bearer {api_key}"})
+    with urllib.request.urlopen(http_request, timeout=15) as response:
+        data = json.loads(response.read().decode("utf-8"))
+    with _openrouter_models_lock:
+        _openrouter_models_cache[url] = (time.monotonic(), data)
+    return data
+
+
 def _list_openrouter_models(request: ModelsRequest) -> dict[str, Any]:
-    url = request.llm_url.strip().rstrip("/") + "/models"
-    http_request = urllib.request.Request(url, headers={"Authorization": f"Bearer {request.api_key}"})
     try:
-        with urllib.request.urlopen(http_request, timeout=15) as response:
-            data = json.loads(response.read().decode("utf-8"))
+        data = _openrouter_models(request.llm_url, request.api_key)
     except urllib.error.HTTPError as exc:
         raise HTTPException(status_code=502, detail=f"Could not list models: HTTP {exc.code}.") from exc
     except Exception as exc:
@@ -516,11 +536,8 @@ def _openrouter_reasoning_capability(request: ReasoningCapabilityRequest) -> dic
     it proxies, so no per-model registry entry is needed the way ScaDS/
     OpenAI need one.
     """
-    url = request.llm_url.strip().rstrip("/") + "/models"
-    http_request = urllib.request.Request(url, headers={"Authorization": f"Bearer {request.api_key}"})
     try:
-        with urllib.request.urlopen(http_request, timeout=15) as response:
-            data = json.loads(response.read().decode("utf-8"))
+        data = _openrouter_models(request.llm_url, request.api_key)
     except Exception:
         return _NO_REASONING_CAPABILITY
 
