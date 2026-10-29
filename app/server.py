@@ -693,6 +693,33 @@ def _parse_iso_datetime(value: Any) -> datetime | None:
         return None
 
 
+# Files whose modification times tell when a run last changed. Checking these
+# few instead of every file keeps the run list fast also for runs with tens
+# of thousands of report pages.
+_RUN_KEY_FILES = (
+    "runConfig.json", "knowledgeBase.db", "knowledgeBase.db-wal", "log.jsonl", "usage.json",
+    "triples.jsonl", "subjectEvents.jsonl", "html/index.html",
+)
+
+
+def _key_file_stats(run_dir: Path) -> tuple[tuple[str, int, int], ...]:
+    stats = []
+    for name in _RUN_KEY_FILES:
+        try:
+            stat = (run_dir / name).stat()
+        except OSError:
+            continue
+        stats.append((name, stat.st_mtime_ns, stat.st_size))
+    return tuple(stats)
+
+
+def _last_modified(run_dir: Path) -> float:
+    stats = _key_file_stats(run_dir)
+    if stats:
+        return max(mtime for _, mtime, _ in stats) / 1e9
+    return _file_time_span(run_dir)[1]
+
+
 def _file_time_span(run_dir: Path) -> tuple[float, float]:
     times = [file.stat().st_mtime for file in run_dir.rglob("*") if file.is_file()]
     if not times:
@@ -1175,7 +1202,7 @@ def _run_summary(run_dir: Path) -> dict[str, Any]:
     config = _read_json(run_dir / "runConfig.json") or {}
     html_dir = run_dir / "html"
     html_index = html_dir / "index.html"
-    _first_file_time, modified = _file_time_span(run_dir)
+    modified = _last_modified(run_dir)
 
     ctrl = controllers.get(run_id)
     active = ctrl is not None and ctrl.is_alive()
@@ -1291,10 +1318,33 @@ def _run_summary(run_dir: Path) -> dict[str, Any]:
     }
 
 
+# Run-list rows of inactive runs, reused until one of the run's key files
+# changes (a resume, a rename or folder move rewrites runConfig.json).
+# Active runs are always measured afresh.
+_summary_cache: dict[str, tuple[tuple[Any, ...], dict[str, Any]]] = {}
+_summary_cache_lock = threading.Lock()
+
+
+def _cached_run_summary(run_dir: Path) -> dict[str, Any]:
+    if _is_run_active(run_dir.name):
+        return _run_summary(run_dir)
+    signature = _key_file_stats(run_dir)
+    with _summary_cache_lock:
+        cached = _summary_cache.get(run_dir.name)
+    if cached and cached[0] == signature:
+        return cached[1]
+    summary = _run_summary(run_dir)
+    with _summary_cache_lock:
+        # _run_summary may itself update runConfig.json (cached counts), so
+        # the signature is taken again after it.
+        _summary_cache[run_dir.name] = (_key_file_stats(run_dir), summary)
+    return summary
+
+
 @app.get("/api/runs")
 def list_runs() -> dict[str, Any]:
     runs = [
-        _run_summary(path)
+        _cached_run_summary(path)
         for path in RUNS_DIR.iterdir()
         if path.is_dir() and not path.name.startswith("_")
     ]
@@ -1594,15 +1644,37 @@ def download_run(run_id: str) -> Response:
     return _zip_response(run_dir, f"minigptkb-{run_id}.zip")
 
 
+LOG_REPLAY_LINES = 500
+
+
+@app.get("/api/runs/{run_id}/log")
+def run_log(run_id: str, before: int, limit: int = 500) -> dict[str, Any]:
+    """Log lines older than event id `before`, the newest `limit` of them,
+    for a viewer scrolling up past the lines the event stream sent."""
+    ctrl = _viewing_controller(run_id)
+    if ctrl is None:
+        raise HTTPException(status_code=404, detail="Run not found.")
+    limit = max(1, min(limit, 2000))
+    with ctrl.lock:
+        older = [event for event in ctrl._log_events if event["id"] < before]
+    return {"events": older[-limit:], "more": len(older) > limit}
+
+
 @app.get("/api/runs/{run_id}/events")
 async def run_events(run_id: str, request: Request) -> StreamingResponse:
     ctrl = _viewing_controller(run_id)
     if ctrl is None:
         raise HTTPException(status_code=404, detail="Run not found.")
     # A browser that reconnects sends the id of the last event it got; carry
-    # on after it instead of replaying the whole history.
+    # on after it. A new viewer gets only the last LOG_REPLAY_LINES log lines
+    # (older ones are fetched page by page from /log when scrolling up).
     last_event_id = request.headers.get("last-event-id", "")
-    start = int(last_event_id) + 1 if last_event_id.isdigit() else 0
+    if last_event_id.isdigit():
+        start = int(last_event_id) + 1
+    else:
+        with ctrl.lock:
+            logs = ctrl._log_events
+            start = logs[-LOG_REPLAY_LINES]["id"] if len(logs) > LOG_REPLAY_LINES else 0
 
     async def stream():
         cursor = start

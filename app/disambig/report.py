@@ -35,7 +35,7 @@ _NODE_PALETTE = [
 ]
 _NODE_LABEL = "#1f2a30"
 MAX_GRAPH_NODES = 400
-MAX_GRAPH_EDGES = 4000
+MAX_GRAPH_EDGES = 1500  # more edges make the browser's graph layout slow on large runs
 MAX_INDEX_ENTITIES = 3000
 MAX_INDEX_TRIPLES = 5000
 

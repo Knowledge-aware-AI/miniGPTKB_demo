@@ -594,7 +594,12 @@ function buildTabController(tabId, root) {
   function resetLogs() {
     logs.length = 0;
     seenLogIds.clear();
+    olderLogsExhausted = false;
   }
+  // A newly opened run shows its latest log lines; scrolling to the top of
+  // the log fetches older ones, a page at a time.
+  let olderLogsExhausted = false;
+  let loadingOlderLogs = false;
   let paused = false;
   let modelsRequestToken = 0;
   let modelsDebounceTimer = null;
@@ -602,6 +607,7 @@ function buildTabController(tabId, root) {
   let currentRunId = null;
   let eventSource = null;
   let lastKnownStatus = null;
+  let lastListedStatus = null;
   // Elapsed time is wall-clock-since-`started_at`, a timestamp the server
   // persists to runConfig.json at launch (see /api/run and /status) --  not
   // a client-side stopwatch. That means it reads correctly the instant a
@@ -732,16 +738,55 @@ function buildTabController(tabId, root) {
     logOutput.scrollTop = logOutput.scrollHeight;
   }
 
-  // Adds one live line without rebuilding the panel.
+  // Adds one live line without rebuilding the panel. Old lines are dropped
+  // from the top only while the reader follows the end of the log, so a
+  // reader looking at older lines keeps them.
   function appendLog(event) {
     if (!pushLog(event)) return;
     const filter = logFilter.value;
     if (filter !== "all" && event.level !== filter) return;
     const follow = logAtBottom();
     logOutput.appendChild(logLine(event));
-    while (logOutput.childElementCount > MAX_VISIBLE_LOG_LINES) logOutput.firstElementChild.remove();
-    if (follow) logOutput.scrollTop = logOutput.scrollHeight;
+    if (follow) {
+      while (logOutput.childElementCount > MAX_VISIBLE_LOG_LINES) logOutput.firstElementChild.remove();
+      logOutput.scrollTop = logOutput.scrollHeight;
+    }
   }
+
+  async function loadOlderLogs() {
+    if (!currentRunId || loadingOlderLogs || olderLogsExhausted) return;
+    const ids = logs.map((entry) => entry.id).filter((id) => id !== undefined && id !== null);
+    if (!ids.length) return;
+    const oldest = Math.min(...ids);
+    if (oldest <= 0) {
+      olderLogsExhausted = true;
+      return;
+    }
+    loadingOlderLogs = true;
+    const runId = currentRunId;
+    try {
+      const response = await fetch(`/api/runs/${encodeURIComponent(runId)}/log?before=${oldest}&limit=500`);
+      if (!response.ok || runId !== currentRunId) return;
+      const data = await response.json();
+      const older = (data.events || []).filter((event) => !seenLogIds.has(event.id));
+      older.forEach((event) => seenLogIds.add(event.id));
+      logs.unshift(...older);
+      if (!data.more) olderLogsExhausted = true;
+      const filter = logFilter.value;
+      const fragment = document.createDocumentFragment();
+      older.filter((entry) => filter === "all" || entry.level === filter).forEach((entry) => fragment.appendChild(logLine(entry)));
+      const fromBottom = logOutput.scrollHeight - logOutput.scrollTop;
+      logOutput.insertBefore(fragment, logOutput.firstChild);
+      logOutput.scrollTop = logOutput.scrollHeight - fromBottom;  // keep the reader's place
+    } catch (error) {
+      // older lines are a convenience; the live log keeps working without them
+    } finally {
+      loadingOlderLogs = false;
+    }
+  }
+  logOutput.addEventListener("scroll", () => {
+    if (logOutput.scrollTop < 40) loadOlderLogs();
+  });
 
   function setControlsEnabled(enabled) {
     pauseButton.disabled = !enabled;
@@ -765,7 +810,15 @@ function buildTabController(tabId, root) {
         appendLog(event);
       } else if (event.type === "status") {
         updateProgress(event);
-        loadRunsDebounced();
+        // The run list (and tab labels) only change when a run's status
+        // does; status events arrive about once a second, so reloading the
+        // list on each would keep the server rebuilding it all the time.
+        if (event.status !== lastListedStatus) {
+          lastListedStatus = event.status;
+          loadRunsDebounced();
+        } else {
+          refreshVisibleRunsList();
+        }
         if (event.status === "running") {
           paused = false;
           pauseButton.textContent = "Pause";
@@ -1741,6 +1794,17 @@ let loadRunsDebounceTimer = null;
 function loadRunsDebounced() {
   clearTimeout(loadRunsDebounceTimer);
   loadRunsDebounceTimer = setTimeout(loadRuns, 300);
+}
+
+// While the Run Explorer is on screen, running runs' counters in it are
+// refreshed at most every 10 seconds; when it is hidden, not at all.
+const RUNS_LIST_REFRESH_MS = 10000;
+let lastRunsListRefresh = 0;
+function refreshVisibleRunsList() {
+  if (!document.querySelector("#runs-view")?.classList.contains("active")) return;
+  if (Date.now() - lastRunsListRefresh < RUNS_LIST_REFRESH_MS) return;
+  lastRunsListRefresh = Date.now();
+  loadRunsDebounced();
 }
 
 document.querySelectorAll(".tab-button").forEach((button) => {
