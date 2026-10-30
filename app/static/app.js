@@ -699,6 +699,8 @@ function buildTabController(tabId, root) {
     root.querySelector('[data-role="processed"]').textContent = Number(status.processed || 0);
     root.querySelector('[data-role="queued"]').textContent = Number(status.queued || 0);
     root.querySelector('[data-role="triples"]').textContent = status.triples || 0;
+    // Not reported by runs of the original pipeline (no disambiguation).
+    root.querySelector('[data-role="pending"]').textContent = status.pending ?? "-";
     root.querySelector('[data-role="failed-subjects"]').textContent = status.failed_subjects || 0;
     root.querySelector('[data-role="literals"]').textContent = status.literals || 0;
     root.querySelector('[data-role="live-cost"]').textContent =
