@@ -382,7 +382,7 @@ class ReportWriter:
 <div class="header-top">
 <div class="header-actions"><a class="download-button" href="/api/runs/{escape(run_id)}/download" download>&#8681; Download results</a>{_THEME_TOGGLE}</div></div>
 <h1 class="hero-title">{escape(config.topic)}</h1>
-<p class="lede">A disambiguated knowledge graph seeded from <a class="header-link" href="E0.html">{escape(config.seed_entity)}</a>, elicited from {escape(config.model_for('elicitation'))}.</p>
+<p class="lede">A disambiguated knowledge graph seeded from <a class="seed-chip" href="E0.html" title="The seed entity: where the crawl started">E0: {escape(config.seed_entity)}</a>, elicited from {escape(config.model_for('elicitation'))}.</p>
 <div class="metrics">{metrics_html}</div>
 </div></header>"""
         body = f"""<section class="band"><h2>Run Configuration</h2><div class="config-grid">{config_html}</div>
