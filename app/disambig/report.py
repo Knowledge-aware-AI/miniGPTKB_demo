@@ -38,6 +38,7 @@ MAX_GRAPH_NODES = 400
 MAX_GRAPH_EDGES = 1500  # more edges make the browser's graph layout slow on large runs
 MAX_INDEX_ENTITIES = 3000
 MAX_INDEX_TRIPLES = 5000
+DISAMBIGUATION_EXAMPLES = 3  # rows in the homonymy and synonymy example tables
 
 _THEME_TOGGLE = (
     '<div class="theme-toggle" id="themeToggle">'
@@ -92,6 +93,11 @@ def _bar_chart(title: str, subtitle: str, rows: list[tuple[str, int]], slots: in
         f'<text x="0" y="22" class="chart-title">{escape(title)}</text>'
         f'<text x="0" y="42" class="chart-subtitle">{escape(subtitle)}</text>{"".join(bars)}</svg></div>'
     )
+
+
+def _top_n(n: int, singular: str, plural: str) -> str:
+    """'The 3 labels' / 'The label' (the example tables show at most DISAMBIGUATION_EXAMPLES rows)."""
+    return f"The {singular}" if n == 1 else f"The {n} {plural}"
 
 
 def _json_island(element_id: str, data: Any) -> str:
@@ -248,7 +254,8 @@ class ReportWriter:
         )
 
         homonym_rows = self.db.execute(
-            "SELECT label, COUNT(*) AS n FROM entities GROUP BY label HAVING n > 1 ORDER BY n DESC, label LIMIT 15"
+            "SELECT label, COUNT(*) AS n FROM entities GROUP BY label HAVING n > 1 ORDER BY n DESC, label LIMIT ?",
+            (DISAMBIGUATION_EXAMPLES,),
         ).fetchall()
         homonym_html = ""
         if homonym_rows:
@@ -264,18 +271,21 @@ class ReportWriter:
                 more = f'<br><span class="muted small">… and {count - len(members)} more</span>' if count > len(members) else ""
                 rows.append(f"<tr><td>{escape(label)}</td><td>{count}</td><td>{links}{more}</td></tr>")
             homonym_html = (
-                "<h3>Labels denoting several entities (homonymy)</h3><div class=\"table-scroll\"><table>"
+                "<h3>Labels denoting several entities (homonymy)</h3>"
+                f'<p class="small">{_top_n(len(homonym_rows), "label", "labels")} shared by the most entities.</p><div class="table-scroll"><table>'
                 "<thead><tr><th>Label</th><th>Entities</th><th>Distinguished as</th></tr></thead><tbody>"
                 + "".join(rows) + "</tbody></table></div>"
             )
         alias_rows = self.db.execute(
             "SELECT e.id, e.label, COUNT(*) AS n, GROUP_CONCAT(a.alias, ' · ') FROM entity_aliases a "
-            "JOIN entities e ON e.id = a.entity_id GROUP BY e.id ORDER BY n DESC, e.seq LIMIT 15"
+            "JOIN entities e ON e.id = a.entity_id GROUP BY e.id ORDER BY n DESC, e.seq LIMIT ?",
+            (DISAMBIGUATION_EXAMPLES,),
         ).fetchall()
         alias_html = ""
         if alias_rows:
             alias_html = (
-                "<h3>Entities with the most aliases (synonymy)</h3><div class=\"table-scroll\"><table>"
+                "<h3>Entities with the most aliases (synonymy)</h3>"
+                f'<p class="small">{_top_n(len(alias_rows), "entity", "entities")} with the most aliases.</p><div class="table-scroll"><table>'
                 "<thead><tr><th>Entity</th><th>Aliases</th><th>Merged labels</th></tr></thead><tbody>"
                 + "".join(
                     f'<tr><td><a href="{escape(eid)}.html">{escape(label)}</a><span class="idref">{escape(eid)}</span></td>'
@@ -378,19 +388,19 @@ class ReportWriter:
         body = f"""<section class="band"><h2>Run Configuration</h2><div class="config-grid">{config_html}</div>
 <details class="reveal"><summary>Elicitation Prompt</summary><div class="reveal-body"><pre class="prompt-block">{prompt}</pre>
 <p class="small">Each subject's description is appended to this prompt ("Description of subject: ..."), so that homonymous subjects are elicited as the entity they denote.</p></div></details></section>
+<section class="band"><h2>Knowledge Graph</h2>{graph_note}<div id="graphCanvas" class="graph-canvas"></div></section>
+<section class="band"><h2>Run Status</h2><p class="note">{escape(status_note)}</p></section>
+{charts}
 <section class="band"><h2>Disambiguation</h2>
 <p>Entities, relations and classes have unique ids. Mentions with different labels are merged into one entity (synonymy), and one label can denote several distinct entities (homonymy).</p>
 <div class="stat-grid">{disamb_html}</div>{homonym_html}{alias_html}</section>
-<section class="band"><h2>Knowledge Graph</h2>{graph_note}<div id="graphCanvas" class="graph-canvas"></div></section>
-<section class="band"><h2>Run Status</h2><p class="note">{escape(status_note)}</p></section>
-{failures_html}
-{charts}
 <section class="band"><details class="reveal"><summary>Entity Index <span class="count-badge" id="entityCount">{stats['entities']}</span></summary>
 <div class="reveal-body">{entity_note}<input type="text" id="entitySearch" class="search-box" placeholder="Filter entities by name or id&hellip;" autocomplete="off">
 <ul class="entity-grid" id="entityList">{entity_list}</ul></div></details></section>
 <section class="band"><details class="reveal" id="triplesDetails"><summary>All Triples <span class="count-badge">{stats['triples']}</span></summary>
 <div class="reveal-body">{triple_note}<div class="table-scroll"><table><thead><tr><th>Subject</th><th>Relation</th><th>Object</th></tr></thead>
-<tbody id="tripleTableBody"></tbody></table></div></div></details></section>"""
+<tbody id="tripleTableBody"></tbody></table></div></div></details></section>
+{failures_html}"""
         scripts = (
             '<script src="vis-network.min.js"></script>'
             + _json_island("graph-nodes-data", nodes)
